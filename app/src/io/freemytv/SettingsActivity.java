@@ -991,7 +991,8 @@ public class SettingsActivity extends Activity {
         private static final int CLOCK_ROW = 3, PHOTOS_ROW = 4, TOP_ROW = 6, PICKS_ROW = 7, WATCH_ROW = 8,
                 SAVER_ROW = 9, ANDROID_APPS_ROW = 10, STATUS_ICONS_ROW = 11, RECENTS_ROW = 12, POWER_ON_ROW = 13,
                 LIVE_BUTTON_ROW = 14, WEATHER_ROW = 15, CITY_ROW = 16, FORECAST_ROW = 17, PLAYING_ROW = 18,
-                HOME_ROW = Config.HOME_ASSISTANT ? 19 : -1, QUOTES_ROW = Config.HOME_ASSISTANT ? 20 : 19, COIN_ROWS = QUOTES_ROW + 1;
+                NAME_ROW = 19,   // fork: the name the home screen greets
+                HOME_ROW = Config.HOME_ASSISTANT ? 20 : -1, QUOTES_ROW = Config.HOME_ASSISTANT ? 21 : 20, COIN_ROWS = QUOTES_ROW + 1;
         /** No "home" on Xiaomi TVs: their remote sends one Home press as a burst of presses (HomeView.BURST_MS). */
         private static final String[] RECENTS = RemoteKeys.XIAOMI ? new String[] {"off", "drawer"}
                 : new String[] {"off", "drawer", "home"};
@@ -1023,6 +1024,7 @@ public class SettingsActivity extends Activity {
             l.add(Ui.tr("City"));
             l.add(Ui.tr("Forecast"));
             l.add(Ui.tr("Now Playing widget"));
+            l.add(Ui.tr("Your name"));
             if (HOME_ROW >= 0) l.add("Home Assistant");
             l.add(Ui.tr("Quotes widget"));
             l.add("Bitcoin");
@@ -1133,6 +1135,7 @@ public class SettingsActivity extends Activity {
             v[CITY_ROW] = !cityStatus.isEmpty() ? cityStatus : Prefs.city().isEmpty() ? "—" : Prefs.city();
             v[FORECAST_ROW] = Prefs.forecast().equals("days") ? Ui.tr("Next days") : Ui.tr("Next hours");
             v[PLAYING_ROW] = onOff(Prefs.nowPlaying());
+            v[NAME_ROW] = Prefs.userName().isEmpty() ? "—" : Prefs.userName();
             if (HOME_ROW >= 0) v[HOME_ROW] = onOff(HomeAssistant.on(getContext()));
             v[QUOTES_ROW] = onOff(Prefs.quotes());
             // No quotes widget, nowhere to show prices: the coins read as off (and stay locked) until it is back on.
@@ -1529,6 +1532,7 @@ public class SettingsActivity extends Activity {
                 }
                 case WEATHER_ROW: Prefs.setWeather(!Prefs.weather()); break;
                 case CITY_ROW: return;
+                case NAME_ROW: return;
                 case FORECAST_ROW:   // both are in memory: nothing to fetch
                     Prefs.setForecast(Prefs.forecast().equals("days") ? "hours" : "days");
                     return;
@@ -1547,6 +1551,29 @@ public class SettingsActivity extends Activity {
                     break;
             }
             HomeData.get(getContext()).settingsChanged();
+        }
+
+        /** Fork: the name for the home screen's greeting, typed with the remote; empty greets without one. */
+        private void askName() {
+            EditText field = new EditText(activity);
+            field.setSingleLine(true);
+            field.setText(Prefs.userName());
+            field.setSelection(field.getText().length());
+            field.setHint(Ui.tr("Type your name"));
+            field.setImeOptions(EditorInfo.IME_ACTION_DONE);
+            AlertDialog dialog = new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(Ui.tr("Your name"))
+                    .setView(field)
+                    .setPositiveButton(Ui.tr("Save"), (d, which) -> { Prefs.setUserName(field.getText().toString()); invalidate(); })
+                    .setNegativeButton(Ui.tr("Cancel"), null)
+                    .create();
+            field.setOnEditorActionListener((v, action, event) -> {
+                dialog.dismiss();
+                Prefs.setUserName(field.getText().toString());
+                invalidate();
+                return true;
+            });
+            dialog.show();
         }
 
         private void askCity() {
@@ -2530,6 +2557,9 @@ public class SettingsActivity extends Activity {
                 openPicker(PICK_LANGUAGE);
             } else if (screen == HOME_SETTINGS && pickScroll + focus == CITY_ROW) {
                 askCity();
+                return;
+            } else if (screen == HOME_SETTINGS && pickScroll + focus == NAME_ROW) {
+                askName();
                 return;
             } else if (screen == HOME_SETTINGS && pickScroll + focus == PHOTOS_ROW && ImmichPhotos.configured(getContext())) {
                 openPhotoSources();

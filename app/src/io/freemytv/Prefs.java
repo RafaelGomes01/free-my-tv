@@ -300,6 +300,14 @@ final class Prefs {
     static String latitude() { return sp().getString("latitude", Place.latitude()); }
     static String longitude() { return sp().getString("longitude", Place.longitude()); }
 
+    /** Fork: the name the home screen greets ("Good morning, {name}"); empty greets without one. */
+    static String userName() { return sp().getString("userName", "").trim(); }
+
+    static void setUserName(String name) {
+        sp().edit().putString("userName", name.trim()).apply();
+        version++;
+    }
+
     static void setCity(String name, String latitude, String longitude) {
         sp().edit().putString("city", name).putString("latitude", latitude).putString("longitude", longitude).apply();
         version++;

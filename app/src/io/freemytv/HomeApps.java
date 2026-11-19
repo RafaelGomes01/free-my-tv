@@ -322,7 +322,8 @@ final class HomeApps {
             case TOP_INPUTS: return action(INPUTS, TOP_INPUTS, Ui.tr("HDMI Inputs"), "hdmi");
             case TOP_RECENTS: return action(RECENTS, TOP_RECENTS, Ui.tr("Recent Apps"), "recents");
             case TOP_STORE: return action(APP, TOP_STORE, Ui.tr("App Store"), "store");
-            default: return action(SETTINGS, TOP_SETTINGS, Ui.tr("light|Settings"), "settings");
+            // Fork: the gear opens the TV's own settings; Free My TV's stay in the drawer (Home Settings).
+            default: return action(ANDROID_SETTINGS, TOP_SETTINGS, Ui.tr("TV Settings"), "settings");
         }
     }
 

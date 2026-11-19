@@ -20,7 +20,7 @@ Os valores com chave (TMDB) e a cidade estão no `config.properties`, que fica s
 | Relógio | Automático |
 | Minhas fotos | Nenhuma |
 | Sons de navegação | Ligado |
-| Conteúdo do topo | Destaques |
+| Conteúdo do topo | Continuar assistindo |
 | Apps de Continuar assistindo | 6 de 6 |
 | Assistir pela tela de descanso | Desligado |
 | Apps de Android | Desligado |
@@ -33,6 +33,7 @@ Os valores com chave (TMDB) e a cidade estão no `config.properties`, que fica s
 | Previsão | Próximas horas |
 | Widget tocando agora | Desligado |
 | Widget de cotações | Desligado |
+| Seu nome (fork, desde 1.5.0.1) | o teu nome, escrito na TV |
 | Chave do TMDB | definida (no `config.properties`) |
 | Chave do Watchmode | Não definida |
 

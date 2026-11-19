@@ -337,6 +337,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private Paint labelPaint, metaPaint, clockPaint, buttonPaint, capsuleText, tipPaint, quotePaint, staleQuote;
     private Paint rowTitle, drawerLabel, cardTitle, cardText, cardDim, cardDimRight, rainPaint, bigTemp, hourPaint, hourTemp, dayLow;
+    private Paint calDay, calToday;   // fork: the month calendar on the weather card
     private Paint pricePaint, changePaint, sheetTitle;
     private TextPaint titlePaint, gridLabel, toastPaint;
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -963,6 +964,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         hourTemp.setTextAlign(Paint.Align.CENTER);
         dayLow = Ui.numbers(Ui.medium, 22 * k, 0xADFFFFFF);
         dayLow.setTextAlign(Paint.Align.CENTER);
+        calDay = Ui.numbers(Ui.medium, 20 * k, 0xF2FFFFFF);
+        calDay.setTextAlign(Paint.Align.CENTER);
+        calToday = Ui.numbers(Ui.semibold, 20 * k, 0xFF1D1D1F);
+        calToday.setTextAlign(Paint.Align.CENTER);
         pricePaint = Ui.numbers(Ui.medium, 26 * k, 0xF2FFFFFF);
         pricePaint.setTextAlign(Paint.Align.RIGHT);
         changePaint = Ui.numbers(Ui.semibold, 21 * k, 0xFFFFFFFF);
@@ -2188,6 +2193,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         hourPaint.setColor(tone(L_DIM, 0xADFFFFFF));
         hourTemp.setColor(drawerInk(0.95f));
         dayLow.setColor(tone(L_DIM, 0xADFFFFFF));
+        calDay.setColor(drawerInk(0.9f));
+        calToday.setColor(tone(0xFFFFFFFF, L_INK));
         pricePaint.setColor(drawerInk(0.95f));
         float titleBase = ROW_TITLE * k;
         if (drawerInputs > 0) c.drawText(Ui.tr("Inputs"), drawerRects[0].left + 4 * k, titleBase, rowTitle);
@@ -2252,9 +2259,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.drawText(Ui.tr("No weather data right now."), x, r.top + 120 * k, cardDim);
             return;
         }
+        // Fork: a wide card (no quotes card beside it) keeps its right part for the month's calendar.
+        float right = r.width() >= CALENDAR_MIN_W * k ? r.right - CALENDAR_W * k : r.right;
+        if (right < r.right) drawCalendar(c, r, right);
         if (!rainText.isEmpty()) {
             rainPaint.setColor(tone(L_FAINT, 0x99FFFFFF));   // the card's quiet tone, as the prices' note beside it
-            c.drawText(rainText, r.right - 34 * k, r.top + 54 * k, rainPaint);
+            c.drawText(rainText, right - 34 * k, r.top + 54 * k, rainPaint);
         }
         String symbol = Symbols.weather(wx.code, wx.isDay);
         float sw = Symbols.width(getContext(), symbol, 52 * k);
@@ -2268,7 +2278,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         c.drawRoundRect(split - k, r.top + 34 * k, split + k, r.bottom - 34 * k, k, k, fill);
         float hx = split + 30 * k;
         if (textDays) {
-            float hw = (r.right - 30 * k - hx) / 5;
+            float hw = (right - 30 * k - hx) / 5;
             for (int i = 0; i < wx.days.size() && i < 5; i++) {
                 float hc = hx + hw * (i + 0.5f);
                 c.drawText(dayText[i], hc, r.top + 96 * k, hourPaint);
@@ -2280,7 +2290,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawText(dayMinText[i], left + maxW + gap + minW / 2, r.top + 196 * k, dayLow);
             }
         } else {
-            float hw = (r.right - 30 * k - hx) / 6;
+            float hw = (right - 30 * k - hx) / 6;
             for (int i = 0; i < wx.hours.size() && i < 6; i++) {
                 float hc = hx + hw * (i + 0.5f);
                 c.drawText(hourText[i], hc, r.top + 96 * k, hourPaint);
@@ -2291,6 +2301,65 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float sx = hx, base = r.top + 258 * k;
         if (wx.sunrise != 0) sx = sunItem(c, "sunrise", sunriseText, sx, base) + 36 * k;
         if (wx.sunset != 0) sunItem(c, "sunset", sunsetText, sx, base);
+    }
+
+    // MARK: - Calendar (fork)
+
+    /** The calendar's width on the weather card, and the card's narrowest width that still makes room for it. */
+    private static final float CALENDAR_W = 520, CALENDAR_MIN_W = 1300;
+    private static final String[] DAY_NUMBERS = new String[32];
+    static { for (int i = 1; i < 32; i++) DAY_NUMBERS[i] = Integer.toString(i); }
+    private String calTitle = "";
+    private final String[] calWeekdays = new String[7];
+    private int calOffset, calDays, calToday0 = -1, calWeeks = 5;
+    private long calMinute = -1;
+    private String calLanguage = "";
+
+    /** This month, from the first day of the week the language uses; once a minute (the day can turn), never per frame. */
+    private void refreshCalendar() {
+        long minute = System.currentTimeMillis() / 60_000;
+        if (minute == calMinute && Ui.language.equals(calLanguage)) return;
+        calMinute = minute;
+        calLanguage = Ui.language;
+        java.util.Locale loc = Ui.locale();
+        java.util.Calendar cal = java.util.Calendar.getInstance(loc);
+        calToday0 = cal.get(java.util.Calendar.DAY_OF_MONTH);
+        calDays = cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH);
+        int first = cal.getFirstDayOfWeek();
+        String month = new java.text.SimpleDateFormat("LLLL yyyy", loc).format(cal.getTime());
+        calTitle = month.isEmpty() ? month : month.substring(0, 1).toUpperCase(loc) + month.substring(1);
+        cal.set(java.util.Calendar.DAY_OF_MONTH, 1);
+        calOffset = (cal.get(java.util.Calendar.DAY_OF_WEEK) - first + 7) % 7;
+        calWeeks = (calOffset + calDays + 6) / 7;
+        String[] names = new java.text.DateFormatSymbols(loc).getShortWeekdays();   // index 1 = Sunday
+        for (int i = 0; i < 7; i++) {
+            String n = names[(first - 1 + i) % 7 + 1].replace(".", "");
+            calWeekdays[i] = n.isEmpty() ? n : n.substring(0, 1).toUpperCase(loc);
+        }
+    }
+
+    /** The month on the right of the weather card: its name, the weekdays, the days, today in a filled circle. */
+    private void drawCalendar(Canvas c, RectF r, float left) {
+        refreshCalendar();
+        fill.setShader(null);
+        fill.setColor(tone(0x1A000000, 0x24FFFFFF));
+        c.drawRoundRect(left - k, r.top + 34 * k, left + k, r.bottom - 34 * k, k, k, fill);
+        float x0 = left + 34 * k, x1 = r.right - 34 * k, cw = (x1 - x0) / 7;
+        c.drawText(calTitle, x0, r.top + 54 * k, cardTitle);
+        for (int i = 0; i < 7; i++) c.drawText(calWeekdays[i], x0 + cw * (i + 0.5f), r.top + 96 * k, hourPaint);
+        float gridTop = r.top + 112 * k, rowH = (r.bottom - 22 * k - gridTop) / Math.max(5, calWeeks);
+        float half = Ui.halfCap(calDay);
+        for (int d = 1; d <= calDays; d++) {
+            int cell = calOffset + d - 1;
+            float cx = x0 + cw * (cell % 7 + 0.5f), cy = gridTop + rowH * (cell / 7 + 0.5f);
+            if (d == calToday0) {
+                fill.setColor(tone(L_INK, 0xFFFFFFFF));
+                c.drawCircle(cx, cy, Math.min(rowH, cw) * 0.48f, fill);
+                c.drawText(DAY_NUMBERS[d], cx, cy + half, calToday);
+            } else {
+                c.drawText(DAY_NUMBERS[d], cx, cy + half, calDay);
+            }
+        }
     }
 
     private void refreshDrawerText() {
@@ -4115,6 +4184,31 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // MARK: - Continue watching (Settings > Top of the screen)
 
     /** Picks need a TMDB key: without one, "picks" shows the clock, like "nothing". */
+    // Fork: the top title greets by the time of day ("Good morning, Rafael"), in place of "For You" / "Continue
+    // Watching". Made again at most once a minute, or when the name or the language changes; never in onDraw's way.
+    private String helloText = "";
+    private long helloAt;
+    private int helloPrefs = -1, helloLang = -1;
+
+    private String greeting() {
+        long now = System.currentTimeMillis();
+        if (now - helloAt < 60_000 && helloPrefs == Prefs.version && helloLang == Ui.generation) return helloText;
+        helloAt = now;
+        helloPrefs = Prefs.version;
+        helloLang = Ui.generation;
+        int hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+        String name = Prefs.userName();
+        boolean morning = hour >= 5 && hour < 12, afternoon = hour >= 12 && hour < 20;
+        if (name.isEmpty()) {
+            helloText = morning ? Ui.tr("Good morning") : afternoon ? Ui.tr("Good afternoon") : Ui.tr("Good evening");
+        } else {
+            helloText = morning ? Ui.trf("Good morning, {name}", "name", name)
+                    : afternoon ? Ui.trf("Good afternoon, {name}", "name", name)
+                    : Ui.trf("Good evening, {name}", "name", name);
+        }
+        return helloText;
+    }
+
     private boolean picksMode() {
         return topMode.equals(Prefs.TOP_PICKS) && picksOn();
     }
@@ -4674,7 +4768,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (HomeData.coinCount() > 0 || playingTab != null) drawQuotes(c);
             return;
         }
-        String hello = picksMode() ? Ui.tr("For You") : Ui.tr("Continue Watching");
+        String hello = greeting();
         c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
         titleRight = MARGIN * k + lTitle.measureText(hello);
         if (!picksMode()) {
@@ -4866,7 +4960,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             Symbols.draw(getContext(), c, it.symbol, cell.centerX(), cell.centerY(), 27 * k * s,
                     blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
-            if (f > 0.01f) {
+            if (f > 0.01f && !HomeApps.TOP_SETTINGS.equals(it.key)) {   // fork: the gear shows no name when focused
                 String label = it.label;
                 float half = lTip.measureText(label) / 2;
                 float x = Math.min(r.centerX(), CONTENT_R * k - half);
@@ -4889,7 +4983,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         int color = Ui.alpha(tone(L_INK, 0xEBFFFFFF), 0.85f);
         float x = MARGIN * k;
         // The top title ("For You", or "Continue Watching") is on this line too: the icons start after it, not on it.
-        if (!clockMode()) x += lTitle.measureText(picksMode() ? Ui.tr("For You") : Ui.tr("Continue Watching")) + gap;
+        if (!clockMode()) x += lTitle.measureText(greeting()) + gap;
         if (network != 0) x = drawStatusIcon(c, network == 2 ? "ethernet" : "wifi", x, height, gap, color);
         if (bluetoothConnected) x = drawStatusIcon(c, "bluetooth", x, height, gap, color);
         if (usbConnected) drawStatusIcon(c, "usb", x, height, gap, color);
