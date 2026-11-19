@@ -576,6 +576,7 @@ public class QuickPanelActivity extends Activity {
                     }
                     return true;
                 case KeyEvent.KEYCODE_NOTIFICATION:
+                case KeyEvent.KEYCODE_SETTINGS:   // fork: Xiaomi's gear
                     if (!down) close();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_UP:

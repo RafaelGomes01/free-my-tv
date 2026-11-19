@@ -174,7 +174,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // At the top: tabs (0 to 2) and icon-only buttons (3 to 5); the three cards
     private int tab, topIndex, cardIndex;
-    private int widgetIndex;    // with TalkBack on, the drawer's weather (0) or quotes (1) card can take the focus
+    private int widgetIndex;    // with TalkBack on, the drawer's weather (0), quotes (1) or calendar (2) card can take the focus
     private List<Recs.Pick> cards = new ArrayList<>();
     // The three tabs, then the round buttons at the top right (up to HomeApps.MAX_TOP).
     private final Spring[] topFocus = new Spring[3 + HomeApps.MAX_TOP];
@@ -296,7 +296,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int drawerHome;            // where the Home Assistant tiles start (the list's size without them)
     private Spring[] drawerFocus = new Spring[0];
     private RectF[] drawerRects = new RectF[0];
-    private final RectF weatherCard = new RectF(), quotesCard = new RectF();
+    private final RectF weatherCard = new RectF(), quotesCard = new RectF(), calendarCard = new RectF();
     private final Spring drawer = new Spring(0.46f, 0.92f, 0);
     private boolean drawerOpen;
     private int drawerIndex;
@@ -2082,12 +2082,26 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             x += tw + gap;
         }
         float cardsTop = CARDS_TOP * k, split = left + (right - left) * 0.585f;
-        boolean wx = Prefs.weather(), qt = Prefs.quotes() && HomeData.active().length > 0;
-        // A card that is off gives its room to the other one.
-        weatherCard.set(left, cardsTop, qt ? split - 16 * k : right, cardsTop + CARDS_H * k);
-        quotesCard.set(wx ? split + 16 * k : left, cardsTop, right, cardsTop + CARDS_H * k);
+        boolean wx = Prefs.weather(), qt = Prefs.quotes() && HomeData.active().length > 0, cal = Prefs.calendar();
+        if (!cal) {
+            // A card that is off gives its room to the other one.
+            weatherCard.set(left, cardsTop, qt ? split - 16 * k : right, cardsTop + CARDS_H * k);
+            quotesCard.set(wx ? split + 16 * k : left, cardsTop, right, cardsTop + CARDS_H * k);
+        } else {
+            // Fork: with the calendar, the cards that are on share the row in equal parts (weather, calendar, quotes).
+            RectF[] order = {wx ? weatherCard : null, calendarCard, qt ? quotesCard : null};
+            int cards = 0;
+            for (RectF r : order) if (r != null) cards++;
+            float g = 32 * k, w = (right - left - g * (cards - 1)) / cards, x0 = left;
+            for (RectF r : order) {
+                if (r == null) continue;
+                r.set(x0, cardsTop, x0 + w, cardsTop + CARDS_H * k);
+                x0 += w + g;
+            }
+        }
         snap(weatherCard);
         snap(quotesCard);
+        snap(calendarCard);
         // The symbols at their sizes at rest and focused: drawing them never scales one.
         for (HomeApps.Item it : drawerItems) {
             Symbols.warm(getContext(), it.symbol, 34 * k);
@@ -2205,6 +2219,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = 0; i < drawerItems.size(); i++) if (i != top) drawDrawerTile(c, i);
         if (top >= 0) drawDrawerTile(c, top);
         if (Prefs.weather()) drawWeatherCard(c, weatherCard);
+        if (Prefs.calendar()) drawCalendarCard(c, calendarCard);
         if (Prefs.quotes() && HomeData.active().length > 0) drawQuotesCard(c, quotesCard);
     }
 
@@ -2259,9 +2274,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.drawText(Ui.tr("No weather data right now."), x, r.top + 120 * k, cardDim);
             return;
         }
-        // Fork: a wide card (no quotes card beside it) keeps its right part for the month's calendar.
-        float right = r.width() >= CALENDAR_MIN_W * k ? r.right - CALENDAR_W * k : r.right;
-        if (right < r.right) drawCalendar(c, r, right);
+        float right = r.right;
         if (!rainText.isEmpty()) {
             rainPaint.setColor(tone(L_FAINT, 0x99FFFFFF));   // the card's quiet tone, as the prices' note beside it
             c.drawText(rainText, right - 34 * k, r.top + 54 * k, rainPaint);
@@ -2273,13 +2286,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         c.drawText(HomeData.condition(wx.code, wx.isDay), x, r.top + 220 * k, cardText);
         c.drawText(highLow, x, r.top + 258 * k, cardDim);
         float split = r.left + 392 * k;
+        // Fork: as many hours or days as fit (the card can be half or a third of the row); none: only the current weather.
+        int fit = (int) ((right - 30 * k - split - 30 * k) / (120 * k));
+        if (fit < 1) return;
         fill.setShader(null);
         fill.setColor(tone(0x1A000000, 0x24FFFFFF));
         c.drawRoundRect(split - k, r.top + 34 * k, split + k, r.bottom - 34 * k, k, k, fill);
         float hx = split + 30 * k;
         if (textDays) {
-            float hw = (right - 30 * k - hx) / 5;
-            for (int i = 0; i < wx.days.size() && i < 5; i++) {
+            int n = Math.min(5, fit);
+            float hw = (right - 30 * k - hx) / n;
+            for (int i = 0; i < wx.days.size() && i < n; i++) {
                 float hc = hx + hw * (i + 0.5f);
                 c.drawText(dayText[i], hc, r.top + 96 * k, hourPaint);
                 Symbols.draw(getContext(), c, Symbols.weather(wx.dayCode.get(i), true), hc, r.top + 142 * k, 30 * k, drawerInk(0.9f));
@@ -2290,8 +2307,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 c.drawText(dayMinText[i], left + maxW + gap + minW / 2, r.top + 196 * k, dayLow);
             }
         } else {
-            float hw = (right - 30 * k - hx) / 6;
-            for (int i = 0; i < wx.hours.size() && i < 6; i++) {
+            int n = Math.min(6, fit);
+            float hw = (right - 30 * k - hx) / n;
+            for (int i = 0; i < wx.hours.size() && i < n; i++) {
                 float hc = hx + hw * (i + 0.5f);
                 c.drawText(hourText[i], hc, r.top + 96 * k, hourPaint);
                 Symbols.draw(getContext(), c, Symbols.weather(wx.hourCode.get(i), wx.hourDay.get(i)), hc, r.top + 142 * k, 30 * k, drawerInk(0.9f));
@@ -2305,8 +2323,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - Calendar (fork)
 
-    /** The calendar's width on the weather card, and the card's narrowest width that still makes room for it. */
-    private static final float CALENDAR_W = 520, CALENDAR_MIN_W = 1300;
+    /** The month's width on the calendar card; today's appointments take the rest. */
+    private static final float MONTH_W = 440;
+    private final Snapshot calendarSnapshot = new Snapshot();
+    private String todayTitle = "", noEventsText = "";
     private static final String[] DAY_NUMBERS = new String[32];
     static { for (int i = 1; i < 32; i++) DAY_NUMBERS[i] = Integer.toString(i); }
     private String calTitle = "";
@@ -2328,9 +2348,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         int first = cal.getFirstDayOfWeek();
         String month = new java.text.SimpleDateFormat("LLLL yyyy", loc).format(cal.getTime());
         calTitle = month.isEmpty() ? month : month.substring(0, 1).toUpperCase(loc) + month.substring(1);
+        String day = new java.text.SimpleDateFormat("EEEE, d", loc).format(cal.getTime());   // today, before the 1st below
+        todayTitle = Ui.trf("Today · {day}", "day", day);
         cal.set(java.util.Calendar.DAY_OF_MONTH, 1);
         calOffset = (cal.get(java.util.Calendar.DAY_OF_WEEK) - first + 7) % 7;
         calWeeks = (calOffset + calDays + 6) / 7;
+        noEventsText = Ui.tr("No appointments today");
         String[] names = new java.text.DateFormatSymbols(loc).getShortWeekdays();   // index 1 = Sunday
         for (int i = 0; i < 7; i++) {
             String n = names[(first - 1 + i) % 7 + 1].replace(".", "");
@@ -2338,13 +2361,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
     }
 
-    /** The month on the right of the weather card: its name, the weekdays, the days, today in a filled circle. */
-    private void drawCalendar(Canvas c, RectF r, float left) {
+    private void drawCalendarCard(Canvas c, RectF r) {
+        drawerCard(c, r);
+        if (Ui.LEGACY) calendarSnapshot.draw(c, r, drawerCardsKey(), cc -> drawCalendar(cc, r));
+        else drawCalendar(c, r);
+    }
+
+    /**
+     * The calendar card: the month on the left (its name, the weekdays, the days, today in a filled circle) and today's
+     * appointments on the right. Appointments come from Agenda, not linked to any calendar yet.
+     */
+    private void drawCalendar(Canvas c, RectF r) {
         refreshCalendar();
-        fill.setShader(null);
-        fill.setColor(tone(0x1A000000, 0x24FFFFFF));
-        c.drawRoundRect(left - k, r.top + 34 * k, left + k, r.bottom - 34 * k, k, k, fill);
-        float x0 = left + 34 * k, x1 = r.right - 34 * k, cw = (x1 - x0) / 7;
+        boolean events = r.width() >= (MONTH_W + 300) * k;   // a third of the row: the month alone
+        float monthR = events ? r.left + MONTH_W * k : r.right;
+        if (events) {
+            fill.setShader(null);
+            fill.setColor(tone(0x1A000000, 0x24FFFFFF));
+            c.drawRoundRect(monthR - k, r.top + 34 * k, monthR + k, r.bottom - 34 * k, k, k, fill);
+            drawAgenda(c, r, monthR + 30 * k);
+        }
+        float x0 = r.left + 34 * k, x1 = monthR - 30 * k, cw = (x1 - x0) / 7;
         c.drawText(calTitle, x0, r.top + 54 * k, cardTitle);
         for (int i = 0; i < 7; i++) c.drawText(calWeekdays[i], x0 + cw * (i + 0.5f), r.top + 96 * k, hourPaint);
         float gridTop = r.top + 112 * k, rowH = (r.bottom - 22 * k - gridTop) / Math.max(5, calWeeks);
@@ -2359,6 +2396,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             } else {
                 c.drawText(DAY_NUMBERS[d], cx, cy + half, calDay);
             }
+        }
+    }
+
+    /** Today's appointments: the time, then the title, cut at the card's edge; none (or no calendar linked yet), a quiet line. */
+    private void drawAgenda(Canvas c, RectF r, float x) {
+        float right = r.right - 34 * k;
+        c.drawText(todayTitle, x, r.top + 54 * k, cardTitle);
+        List<Agenda.Event> today = Agenda.today();
+        if (today.isEmpty()) {
+            c.drawText(noEventsText, x, r.top + 110 * k, cardDim);
+            return;
+        }
+        float timeW = cardDim.measureText("00:00") + 18 * k;
+        for (int i = 0; i < today.size() && i < 4; i++) {
+            Agenda.Event e = today.get(i);
+            float base = r.top + (110 + 50 * i) * k;
+            c.drawText(e.time, x, base, cardDim);
+            c.save();   // a long title is cut at the card's edge
+            c.clipRect(x + timeW, base - 40 * k, right, base + 12 * k);
+            c.drawText(e.title, x + timeW, base, cardText);
+            c.restore();
         }
     }
 
@@ -3797,8 +3855,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (continueMode()) for (int i = 0; i < watching.size(); i++) out.add(a11yId(Z_WATCH, i));
         for (int i = shelfFirst; i < Math.min(shelf.size(), shelfFirst + shelfVisible); i++) out.add(a11yId(Z_SHELF, i));
         for (int i = 0; i < drawerItems.size(); i++) out.add(a11yId(Z_DRAWER, i));
-        if (drawerOpen && Prefs.weather()) out.add(a11yId(WIDGETS, 0));
-        if (drawerOpen && Prefs.quotes() && HomeData.active().length > 0) out.add(a11yId(WIDGETS, 1));
+        for (int w : widgets()) out.add(a11yId(WIDGETS, w));
     }
 
     private String a11yText(int id) {
@@ -3835,7 +3892,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 }
                 return label(shelf, i);
             case Z_DRAWER: return label(drawerItems, i);
-            case WIDGETS: return i == 0 ? weatherText() : quotesText();
+            case WIDGETS: return i == 0 ? weatherText() : i == 2 ? calendarText() : quotesText();
             default: return "";
         }
     }
@@ -3895,7 +3952,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 break;
             case WIDGETS:
                 if (!drawerOpen) return false;
-                a11yRect.set(i == 0 ? weatherCard : quotesCard);
+                a11yRect.set(i == 0 ? weatherCard : i == 2 ? calendarCard : quotesCard);
                 dy = 0;
                 break;
             default:
@@ -3945,8 +4002,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         List<Integer> out = new ArrayList<>();
         if (!drawerOpen) return out;
         if (Prefs.weather()) out.add(0);
+        if (Prefs.calendar()) out.add(2);   // fork: the calendar card, between the weather and the quotes
         if (Prefs.quotes() && HomeData.active().length > 0) out.add(1);
         return out;
+    }
+
+    /** What TalkBack reads on the calendar card: the month, today, and today's appointments. */
+    private String calendarText() {
+        refreshCalendar();
+        StringBuilder s = new StringBuilder(calTitle).append(". ").append(todayTitle).append(". ");
+        List<Agenda.Event> today = Agenda.today();
+        if (today.isEmpty()) s.append(noEventsText).append('.');
+        for (Agenda.Event e : today) s.append(e.time).append(", ").append(e.title).append(". ");
+        return s.toString();
     }
 
     /**

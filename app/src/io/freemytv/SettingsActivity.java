@@ -920,6 +920,11 @@ public class SettingsActivity extends Activity {
                 case KeyEvent.KEYCODE_NUMPAD_ENTER:
                     if (down) {
                         if (e.getRepeatCount() == 0) okDown = true;
+                        // Fork: holding OK on an input in Inputs names it (the release then doesn't toggle it).
+                        else if (okDown && (e.isLongPress() || e.getRepeatCount() >= 8) && screen == SHELF_EDIT && editingInputs) {
+                            okDown = false;
+                            askInputName();
+                        }
                     } else {
                         if (okDown && !e.isCanceled() && spoken.keyClick()) {
                             activate();
@@ -992,7 +997,8 @@ public class SettingsActivity extends Activity {
                 SAVER_ROW = 9, ANDROID_APPS_ROW = 10, STATUS_ICONS_ROW = 11, RECENTS_ROW = 12, POWER_ON_ROW = 13,
                 LIVE_BUTTON_ROW = 14, WEATHER_ROW = 15, CITY_ROW = 16, FORECAST_ROW = 17, PLAYING_ROW = 18,
                 NAME_ROW = 19,   // fork: the name the home screen greets
-                HOME_ROW = Config.HOME_ASSISTANT ? 20 : -1, QUOTES_ROW = Config.HOME_ASSISTANT ? 21 : 20, COIN_ROWS = QUOTES_ROW + 1;
+                CALENDAR_ROW = 20,   // fork: the calendar card
+                HOME_ROW = Config.HOME_ASSISTANT ? 21 : -1, QUOTES_ROW = Config.HOME_ASSISTANT ? 22 : 21, COIN_ROWS = QUOTES_ROW + 1;
         /** No "home" on Xiaomi TVs: their remote sends one Home press as a burst of presses (HomeView.BURST_MS). */
         private static final String[] RECENTS = RemoteKeys.XIAOMI ? new String[] {"off", "drawer"}
                 : new String[] {"off", "drawer", "home"};
@@ -1025,6 +1031,7 @@ public class SettingsActivity extends Activity {
             l.add(Ui.tr("Forecast"));
             l.add(Ui.tr("Now Playing widget"));
             l.add(Ui.tr("Your name"));
+            l.add(Ui.tr("Calendar widget"));
             if (HOME_ROW >= 0) l.add("Home Assistant");
             l.add(Ui.tr("Quotes widget"));
             l.add("Bitcoin");
@@ -1136,6 +1143,7 @@ public class SettingsActivity extends Activity {
             v[FORECAST_ROW] = Prefs.forecast().equals("days") ? Ui.tr("Next days") : Ui.tr("Next hours");
             v[PLAYING_ROW] = onOff(Prefs.nowPlaying());
             v[NAME_ROW] = Prefs.userName().isEmpty() ? "—" : Prefs.userName();
+            v[CALENDAR_ROW] = onOff(Prefs.calendar());
             if (HOME_ROW >= 0) v[HOME_ROW] = onOff(HomeAssistant.on(getContext()));
             v[QUOTES_ROW] = onOff(Prefs.quotes());
             // No quotes widget, nowhere to show prices: the coins read as off (and stay locked) until it is back on.
@@ -1358,7 +1366,7 @@ public class SettingsActivity extends Activity {
             if (RemoteKeys.XIAOMI_AFKR0) return new String[] {Ui.tr("PatchWall button"), Ui.tr("Netflix button"),
                     Ui.tr("Prime Video button"), Ui.tr("YouTube button")};
             if (RemoteKeys.XIAOMI) return new String[] {Ui.tr("Mi button"), Ui.tr("YouTube button"), Ui.tr("PatchWall button"),
-                    Ui.tr("Okko button"), Ui.tr("VK button"), Ui.tr("Rutube button"), Ui.tr("KION button"),
+                    Ui.tr("Settings button"), Ui.tr("Okko button"), Ui.tr("VK button"), Ui.tr("Rutube button"), Ui.tr("KION button"),
                     Ui.tr("Wink button"), Ui.tr("IVI button")};
             if (RemoteKeys.SONY) return new String[] {Ui.tr("BRAVIA CORE button"),
                     Ui.tr("Netflix button"), Ui.tr("Disney+ button"),
@@ -1398,7 +1406,7 @@ public class SettingsActivity extends Activity {
                 appPkgs.add(Prefs.QUICK_SETTINGS);
                 appLabels.add(Ui.tr("Quick Settings"));
             }
-            if (RemoteKeys.TCL || RemoteKeys.PHILIPS_GTV || RemoteKeys.SONY) {
+            if (RemoteKeys.TCL || RemoteKeys.PHILIPS_GTV || RemoteKeys.SONY || RemoteKeys.XIAOMI) {   // fork: Xiaomi too
                 if (!RemoteKeys.SONY) {
                     appPkgs.add(Prefs.QUICK_PANEL);
                     appLabels.add(Ui.tr("Quick Settings"));
@@ -1533,6 +1541,7 @@ public class SettingsActivity extends Activity {
                 case WEATHER_ROW: Prefs.setWeather(!Prefs.weather()); break;
                 case CITY_ROW: return;
                 case NAME_ROW: return;
+                case CALENDAR_ROW: Prefs.setCalendar(!Prefs.calendar()); break;
                 case FORECAST_ROW:   // both are in memory: nothing to fetch
                     Prefs.setForecast(Prefs.forecast().equals("days") ? "hours" : "days");
                     return;
@@ -2255,6 +2264,38 @@ public class SettingsActivity extends Activity {
             Prefs.setInputsHidden(hidden);
         }
 
+        /** Fork: a name for the focused input ("PS5"), typed with the remote; empty goes back to the TV's own. */
+        private void askInputName() {
+            if (pickScroll + focus >= shelfRows.size()) return;
+            String[] row = shelfRows.get(pickScroll + focus);
+            if (row[0].equals(ORDER_ROW) || !row[0].startsWith("hdmi")) return;
+            String key = row[0];
+            EditText field = new EditText(activity);
+            field.setSingleLine(true);
+            field.setText(Prefs.inputName(key));
+            field.setSelection(field.getText().length());
+            field.setHint(row[1]);
+            field.setImeOptions(EditorInfo.IME_ACTION_DONE);
+            Runnable save = () -> {
+                Prefs.setInputName(key, field.getText().toString());
+                rebuildShelfRows(HomeApps.inputCandidates(getContext()));
+                refreshShelfRows(key);
+                invalidate();
+            };
+            AlertDialog dialog = new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(Ui.tr("Input name"))
+                    .setView(field)
+                    .setPositiveButton(Ui.tr("Save"), (d, which) -> save.run())
+                    .setNegativeButton(Ui.tr("Cancel"), null)
+                    .create();
+            field.setOnEditorActionListener((v, action, event) -> {
+                dialog.dismiss();
+                save.run();
+                return true;
+            });
+            dialog.show();
+        }
+
         /** OK: puts the app on the shelf (at the end) or takes it off. */
         private void toggleShelfApp() {
             if (pickScroll + focus >= shelfRows.size()) return;   // an empty list has no row under OK
@@ -2335,6 +2376,7 @@ public class SettingsActivity extends Activity {
                     : max == Integer.MAX_VALUE ? Ui.tr("OK adds or removes an app. ← → change the order.")
                     : Ui.trf("OK adds or removes (up to {n}). ← → change the order.", "n", max),
                     LIST_X * k + 30 * k, hy, hint);
+            if (editingInputs) c.drawText(Ui.tr("Hold OK to rename an input."), LIST_X * k + 30 * k, hy + 38 * k, hint);   // fork
         }
 
         private void openPicker(int which) {

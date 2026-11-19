@@ -526,6 +526,8 @@ final class HomeApps {
             } catch (RuntimeException ignored) {
             }
             String reported = devices.containsKey(info.getId()) ? devices.get(info.getId()) : "";
+            String own = Prefs.inputName("hdmi" + number);   // fork: a name given in Free My TV wins
+            if (!own.isEmpty()) custom = own;
             String label = custom != null && custom.length() > 0 ? custom.toString()
                     : !reported.isEmpty() && connected ? reported : "HDMI " + number;
             String symbol = connected || custom != null ? deviceSymbol(label) : "hdmi";
@@ -610,6 +612,7 @@ final class HomeApps {
         {"play", "apple tv", "chromecast", "fire tv", "firetv", "roku", "shield", "mi box", "tv box", "tvbox", "stick", "streaming", "google tv", "android tv"},
         {"speaker", "soundbar", "sound bar", "receiver", "denon", "yamaha", "marantz", "onkyo", "bose", "sonos", "jbl", "audio", "home theater"},
         {"tv", "cable", "set-top", "decoder", "decodificador", "tuner", "sky", "claro", "vivo"},
+        {"computer", "pc", "computador", "computer", "laptop", "notebook", "portátil", "mac", "desktop"},   // fork
     };
 
     /** The icon for an HDMI device, from the words in its name; a name that says nothing (or a plain port) is the HDMI plug. */

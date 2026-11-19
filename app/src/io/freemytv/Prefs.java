@@ -67,6 +67,9 @@ final class Prefs {
     static final int KEY_XIAOMI_OKKO = KeyEvent.KEYCODE_BUTTON_13, KEY_XIAOMI_VK = KeyEvent.KEYCODE_BUTTON_1,
             KEY_XIAOMI_RUTUBE = KeyEvent.KEYCODE_BUTTON_16, KEY_XIAOMI_KION = KeyEvent.KEYCODE_BUTTON_11,
             KEY_XIAOMI_WINK = KeyEvent.KEYCODE_BUTTON_10, KEY_XIAOMI_IVI = KeyEvent.KEYCODE_BUTTON_12;
+    /** Fork: the gear on Xiaomi's MiTV-MOEU0 remote sends SETTINGS (176); MiTV's policy hands it to launcherx's panel,
+     *  which is off in our mode, so it does nothing there. Opens our quick settings panel by default. */
+    static final int KEY_XIAOMI_SETTINGS = KeyEvent.KEYCODE_SETTINGS;
     /**
      * Xiaomi's MiTV-AFKR0 remote (see RemoteKeys.XIAOMI_AFKR0): the button marked "Mi TV+" is BUTTON_5, the PatchWall
      * one; Netflix is BUTTON_6 (key 416 in its keylayout), Prime Video BUTTON_7 and YouTube BUTTON_16, the code the
@@ -127,8 +130,8 @@ final class Prefs {
             : RemoteKeys.XIAOMI_PATCHWALL_ONLY ? new int[] {KEY_XIAOMI_PATCHWALL}
             : RemoteKeys.XIAOMI_AFKR0 ? new int[] {KEY_XIAOMI_PATCHWALL, KEY_XIAOMI_NETFLIX, KEY_XIAOMI_PRIME,
                     KEY_XIAOMI_YOUTUBE}
-            : RemoteKeys.XIAOMI ? new int[] {KEY_MI, KEY_YOUTUBE, KEY_XIAOMI_PATCHWALL, KEY_XIAOMI_OKKO, KEY_XIAOMI_VK,
-                    KEY_XIAOMI_RUTUBE, KEY_XIAOMI_KION, KEY_XIAOMI_WINK, KEY_XIAOMI_IVI}
+            : RemoteKeys.XIAOMI ? new int[] {KEY_MI, KEY_YOUTUBE, KEY_XIAOMI_PATCHWALL, KEY_XIAOMI_SETTINGS, KEY_XIAOMI_OKKO,
+                    KEY_XIAOMI_VK, KEY_XIAOMI_RUTUBE, KEY_XIAOMI_KION, KEY_XIAOMI_WINK, KEY_XIAOMI_IVI}
             : new int[] {KEY_NETFLIX, KEY_YOUTUBE, KEY_PRIME, KEY_TCL_CHANNEL, KEY_TCL_SETTINGS};
 
     /** Bumped by every change: screens compare it to know when to redraw. */
@@ -373,6 +376,9 @@ final class Prefs {
 
     static boolean weather() { return sp().getBoolean("weather", true); }
     static void setWeather(boolean on) { put("weather", on); }
+    /** Fork: the calendar card beside the weather (the month and today's appointments). */
+    static boolean calendar() { return sp().getBoolean("calendar", true); }
+    static void setCalendar(boolean on) { put("calendar", on); }
     /** The weather card's forecast: "hours" (the next 6 hours) or "days" (the next 5 days). */
     static String forecast() { return "days".equals(sp().getString("forecast", "hours")) ? "days" : "hours"; }
     static void setForecast(String v) { put("forecast", v); }
@@ -534,6 +540,18 @@ final class Prefs {
         put("inputsHidden", sb.toString());
     }
 
+    /** Fork: the name given to an input in Free My TV (Inputs, hold OK), by its key ("hdmi2"); empty: the TV's own. */
+    static String inputName(String key) {
+        return sp().getString("inputName." + key, "").trim();
+    }
+
+    static void setInputName(String key, String name) {
+        String n = name.trim();
+        if (n.isEmpty()) sp().edit().remove("inputName." + key).apply();
+        else sp().edit().putString("inputName." + key, n).apply();
+        version++;
+    }
+
     // MARK: - Remote buttons
 
     private static String defaultApp(int keyCode) {
@@ -596,6 +614,7 @@ final class Prefs {
             case KEY_TCL_CHANNEL: return "";
             case KEY_TCL_SETTINGS: return "com.android.tv.settings";   // TV Settings, as from our home screen (#289)
             case KEY_MI: return HomeMode.PKG;   // our home screen: the remote has no other Home button
+            case KEY_XIAOMI_SETTINGS: return RemoteKeys.XIAOMI ? QUICK_PANEL : "";   // fork: the quick panel
             default: return "";
         }
     }

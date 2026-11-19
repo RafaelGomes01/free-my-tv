@@ -34,6 +34,7 @@ Os valores com chave (TMDB) e a cidade estão no `config.properties`, que fica s
 | Widget tocando agora | Desligado |
 | Widget de cotações | Desligado |
 | Seu nome (fork, desde 1.5.0.1) | o teu nome, escrito na TV |
+| Widget de calendário (fork, desde 1.5.0.2) | Ligado |
 | Chave do TMDB | definida (no `config.properties`) |
 | Chave do Watchmode | Não definida |
 
@@ -67,17 +68,18 @@ Fora: TV aberta, Entradas HDMI, Loja de aplicativos.
 
 ## Entradas
 
-1. HDMI 1
-2. HDMI 2
-3. HDMI 3
+1. HDMI 1 — nome "Apple TV"
+2. HDMI 2 — nome "PS5"
+3. HDMI 3 — nome "PC"
 
-Fora: TV ao Vivo.
+Fora: TV ao Vivo. Os nomes dão-se em Entradas, segurando OK na entrada (fork, desde 1.5.0.2).
 
 ## Botões do Controle
 
 | Botão | Abre |
 |---|---|
 | PatchWall | F1 TV |
+| Ajustes (engrenagem, fork desde 1.5.0.2) | Configurações rápidas |
 | Mi, YouTube, Okko, VK, Rutube, KION, Wink, IVI | Padrão da Xiaomi |
 
 ## Timer de desligamento
