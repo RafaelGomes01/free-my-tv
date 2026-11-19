@@ -710,3 +710,13 @@ entries; its system pieces are in `PROTECTED`. USB debugging opens ADB on 5555 t
   (`tools/make_zones.py`, from the tz database) turns the TV's time zone into the city, the currency and the region.
   `tools/webapp.py` is what both builds share. Preview: `python3 webos/build.py --preview` (or `tizen/build.py`), then
   open `out/webos/index.html` in a browser (a stand-in lists sample apps).
+
+## This fork (RafaelGomes01/free-my-tv)
+
+- `upstream` is simbasjungles/free-my-tv; bring its changes in with `git fetch upstream && git merge upstream/main`.
+  On a conflict in `Updates.java`, keep this fork's `LATEST`, `RELEASES` and `RELEASE_CERT`.
+- Updates come from this fork's releases, signed with its own key (`~/.freemytv/release.keystore`, password in the
+  login Keychain as `freemytv-fork-release-apk`). Publish with `tools/release.sh <version> "<notes>"` (versions like
+  `1.5.0.1`, above upstream's they're based on). Releases are `--generic`: no TMDB key in the APK, which is public; the
+  TV keeps the key typed in Home Settings across updates.
+- The TV: see `CONFIG-TV.md`.
